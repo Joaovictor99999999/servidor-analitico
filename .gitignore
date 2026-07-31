@@ -1,0 +1,13 @@
+# Ignorar motor do Python local
+motor_offline/
+
+# Ignorar banco de dados (não queremos subir dados reais de clientes)
+banco_local/*.db
+
+# Ignorar documentos Word e JSON gerados
+repositorio_arquivos/*.docx
+CAIXA_DE_CORREIO/*.json
+ENVIAR_BD/*.docx
+
+# Ignorar pastas temporárias do Python
+__pycache__/
