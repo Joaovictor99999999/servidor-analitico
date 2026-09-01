@@ -5,12 +5,12 @@ from datetime import datetime, timedelta
 import time
 
 # ==========================================
-# MAPEAMENTO DO BANCO (O mesmo do banco_dados.py)
+# MAPEAMENTO DO BANCO
 # ==========================================
 DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__))
 CAMINHO_BANCO = os.path.join(DIRETORIO_ATUAL, '..', 'banco_local', 'relatorios.db')
 
-def gerar_dados_falsos(quantidade=50):
+def gerar_dados_falsos(quantidade=100): # Aumentei para 100 para o gráfico ficar com uma curva bem legal
     if not os.path.exists(CAMINHO_BANCO):
         print("❌ Banco não encontrado! Rode o banco_dados.py primeiro.")
         return
@@ -34,21 +34,43 @@ def gerar_dados_falsos(quantidade=50):
         "Falta de Energia (Apagão)", "Oscilação na Rede (Surtos/Picos)", 
         "Problema de Infraestrutura"
     ]
+    
+    meses_pt = {1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun', 
+                7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Out', 11: 'Nov', 12: 'Dez'}
 
-    print(f"🚀 Iniciando injeção de {quantidade} OSs no banco de dados...")
+    print(f"🚀 Iniciando injeção de {quantidade} OSs no banco de dados com datas dinâmicas...")
+
+    # Data base para começar a gerar relatórios (ex: 01 de Julho de 2026)
+    data_base = datetime(2026, 1, 1)
 
     for i in range(1, quantidade + 1):
+        # ---------------------------------------------------------
+        # LÓGICA DE DATAS DINÂMICAS E TEMPORAIS
+        # ---------------------------------------------------------
+        # Sorteia um início da OS entre 0 e 150 dias após a data base
+        dias_deslocamento = random.randint(0, 150)
+        dt_inicio = data_base + timedelta(days=dias_deslocamento)
+        
+        # A OS dura entre 1 e 15 dias
+        duracao_os = random.randint(1, 15)
+        dt_termino = dt_inicio + timedelta(days=duracao_os)
+        
+        # Formatação das datas com o mês em Português
+        str_inicio = f"{dt_inicio.day:02d}/{meses_pt[dt_inicio.month]}/{dt_inicio.year}"
+        str_termino = f"{dt_termino.day:02d}/{meses_pt[dt_termino.month]}/{dt_termino.year}"
+
         # ---------------------------------------------------------
         # 1. GERANDO O CABEÇALHO (Tabela relatorios)
         # ---------------------------------------------------------
         projeto = f"CCV26{str(i).zfill(2)}-{random.randint(1000, 9999)}"
-        timestamp = int(time.time()) - random.randint(86400, 15000000) # Datas retroativas aleatórias
+        timestamp = int(dt_termino.timestamp()) 
         id_os = f"{projeto}-{timestamp}"
         nome_docx = f"Relatorio_{id_os}.docx"
         
-        # Sorteia quais checkboxes foram marcadas (0 ou 1)
+        chk_survey = random.choice([0, 1])
         chk_man = random.choice([0, 1])
-        chk_inst = random.choice([0, 1]) if chk_man == 0 else 0 # Evita marcar tudo de uma vez
+        chk_inst = random.choice([0, 1]) if chk_man == 0 else 0 
+        chk_comiss = random.choice([0, 1]) if chk_inst == 1 else 0 # Torna comum comissionar quando há instalação
         chk_desinst = random.choice([0, 1])
 
         cursor.execute('''
@@ -60,20 +82,23 @@ def gerar_dados_falsos(quantidade=50):
         ''', (
             id_os, nome_docx, projeto, "Bacia de Campos", f"INC{random.randint(10000,99999)}", 
             random.choice(clientes), random.choice(sites), random.choice(tecnicos), 
-            "01/Ago/2026", "05/Ago/2026", 
-            0, chk_inst, 0, chk_man, 0, chk_desinst
+            str_inicio, str_termino, 
+            chk_survey, chk_inst, chk_comiss, chk_man, 0, chk_desinst
         ))
 
         # ---------------------------------------------------------
         # 2. GERANDO AS HORAS (Tabela service_log)
         # ---------------------------------------------------------
-        # Cria de 1 a 3 apontamentos de horas por OS
         for _ in range(random.randint(1, 3)):
-            tipo_hr = random.choice(["1 - Trabalho Onshore", "2 - Trabalho Offshore", "5 - Deslocamento Terrestre"])
+            # Garante que o apontamento de horas acontece dentro da janela da OS
+            dias_apontamento = random.randint(0, duracao_os)
+            dt_apont = dt_inicio + timedelta(days=dias_apontamento)
+            str_apont = f"{dt_apont.day:02d}/{meses_pt[dt_apont.month]}/{dt_apont.year}"
+
+            tipo_hr = random.choice(["1 - Trabalho Onshore", "2 - Trabalho Offshore", "3 - Em Stand-By (Onshore)", "4 - Em Stand-By (Offshore)", "5 - Deslocamento Terrestre", "6 - Deslocamento Aéreo", "7 - Deslocamento Aéreo (Offshore)", "8 - Atividade no Escritório"])
             inicio_hr = f"{random.randint(7,10):02d}:00"
             fim_hr = f"{random.randint(14,18):02d}:30"
             
-            # Cálculo rápido de horas decimais pro banco não ficar vazio
             h1 = datetime.strptime(inicio_hr, "%H:%M")
             h2 = datetime.strptime(fim_hr, "%H:%M")
             total = (h2 - h1).total_seconds() / 3600.0
@@ -83,25 +108,23 @@ def gerar_dados_falsos(quantidade=50):
                     id_os, tipo_servico, data_apontamento, hora_inicio, hora_fim, horas_totais, descricao_curta
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', (
-                id_os, tipo_hr, "02/Ago/2026", inicio_hr, fim_hr, total, "Atividade de campo"
+                id_os, tipo_hr, str_apont, inicio_hr, fim_hr, total, "Atividade de campo"
             ))
 
         # ---------------------------------------------------------
         # 3. GERANDO O CHECKLIST (Tabela checklist_intervencoes)
         # ---------------------------------------------------------
-        # Se a OS teve Manutenção ou Instalação, gera equipamentos mexidos
         atividades_os = []
         if chk_man == 1: atividades_os.append("Manutenção")
         if chk_inst == 1: atividades_os.append("Instalação")
         if chk_desinst == 1: atividades_os.append("Desinstalação")
 
         if atividades_os:
-            for _ in range(random.randint(1, 4)): # Mexeu em 1 a 4 equipamentos
+            for _ in range(random.randint(1, 4)): 
                 atv_sorteada = random.choice(atividades_os)
                 cat_sorteada = random.choice(list(catalogo_eq.keys()))
                 eq_sorteado = random.choice(catalogo_eq[cat_sorteada])
                 
-                # Regra de ouro da causa
                 if atv_sorteada == "Instalação":
                     causa = "N/A (Não se aplica)"
                 elif atv_sorteada == "Desinstalação":
@@ -119,7 +142,7 @@ def gerar_dados_falsos(quantidade=50):
 
     conn.commit()
     conn.close()
-    print("✅ Sucesso! O banco de dados agora está lotado de informações falsas e pronto para o BI.")
+    print("✅ Sucesso! O banco de dados agora está com uma linha do tempo realista para testes.")
 
 if __name__ == "__main__":
-    gerar_dados_falsos(50)
+    gerar_dados_falsos(100)
