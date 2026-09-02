@@ -8,3 +8,7 @@ ENVIAR_BD/*.docx
 
 # Ignorar pastas temporárias do Python
 __pycache__/
+
+AUTOMAÇAO_RELATORIO/GERADOR_RELATORIOS_OLS/motor_offline/
+
+AUTOMAÇAO_RELATORIO/GERADOR_RELATORIOS_OLS/__pycache__/
